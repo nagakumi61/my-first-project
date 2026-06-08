@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <!-- viewport-fit=cover でノッチ・ホームバー領域まで背景を広げる -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+
+  <!-- ── Apple PWA 設定 ── -->
+  <!-- Safari の「ホーム画面に追加」でフルスクリーンアプリとして起動 -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="指さし" />
+  <!-- Android Chrome 用 -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#e8f4ff" />
+  <!-- 電話番号の自動リンク化を防止 -->
+  <meta name="format-detection" content="telephone=no" />
+
+  <title>指さしコミュニケーション</title>
+  <style>
+    /* ── 外部フォント不要：iOS 標準の日本語フォントを使用 ── */
+    *, *::before, *::after {
+      box-sizing: border-box; margin: 0; padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none; touch-action: manipulation;
+    }
+
+    :root {
+      --bg:           #e8f4ff;
+      --surface:      #ffffff;
+      --accent:       #1d6fea;
+      --accent-dark:  #1354c2;
+      --accent-light: #dbeafe;
+      --text:         #0f2d5e;
+      --muted:        #5a7fa8;
+      --border:       #93c5fd;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      /* iOS 内蔵日本語フォント（インターネット不要） */
+      font-family: 'Hiragino Sans', 'ヒラギノ角ゴシック',
+                   -apple-system, BlinkMacSystemFont,
+                   'Helvetica Neue', sans-serif;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body::before {
+      content: '';
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(ellipse at 10% 10%, rgba(29,111,234,.16) 0%, transparent 50%),
+        radial-gradient(ellipse at 90% 90%, rgba(56,189,248,.12) 0%, transparent 50%);
+    }
+
+    #app {
+      position: relative; z-index: 1;
+      width: 100%; height: 100%;
+      /* セーフエリア（ノッチ・ホームインジケーター）を考慮 */
+      padding-top:    env(safe-area-inset-top,    0px);
+      padding-right:  env(safe-area-inset-right,  0px);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      padding-left:   env(safe-area-inset-left,   0px);
+    }
+
+    /* ── 画面共通 ── */
+    .screen {
+      display: none; position: absolute; inset: 0;
+      flex-direction: column; align-items: center; justify-content: center;
+      padding: 1.5rem 2rem;
+      animation: fadeIn .2s ease;
+    }
+    .screen.active { display: flex; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(.97); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━
+       画面①　母音選択
+    ━━━━━━━━━━━━━━━━━━━━━━ */
+    .title {
+      font-size: clamp(1rem, 2.5vw, 1.5rem);
+      letter-spacing: .3em;
+      color: var(--muted);
+      margin-bottom: clamp(1.5rem, 4vh, 3rem);
+    }
+
+    .vowel-grid {
+      display: flex;
+      gap: clamp(.8rem, 2vw, 1.6rem);
+      justify-content: center;
+    }
+
+    .btn-vowel {
+      width:  clamp(110px, 14vw, 155px);
+      height: clamp(110px, 14vw, 155px);
+      border-radius: 24px;
+      border: 2.5px solid var(--border);
+      background: var(--surface);
+      color: var(--accent);
+      font-size: clamp(3rem, 7vw, 5rem);
+      font-family: inherit; font-weight: 700;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 20px rgba(29,111,234,.12), 0 1px 4px rgba(0,0,0,.05);
+      transition: transform .12s, background .12s, color .12s, box-shadow .12s;
+    }
+    .btn-vowel:active {
+      transform: scale(.93);
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 32px rgba(29,111,234,.45);
+    }
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━
+       画面②　文字選択
+    ━━━━━━━━━━━━━━━━━━━━━━ */
+    .consonant-header {
+      width: 100%; display: flex; align-items: center;
+      margin-bottom: clamp(.7rem, 2vh, 1.4rem);
+    }
+
+    .btn-back {
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      color: var(--accent);
+      font-family: inherit;
+      font-size: clamp(.9rem, 2.2vw, 1.1rem);
+      padding: .7rem 1.6rem;
+      border-radius: 999px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+      transition: background .15s;
+    }
+    .btn-back:active { background: var(--accent-light); }
+
+    .row-label {
+      flex: 1; text-align: center;
+      font-size: clamp(1.4rem, 3.5vw, 2.4rem);
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: .2em;
+    }
+
+    /* メイン文字グリッド（5列×2行） */
+    .consonant-grid {
+      display: grid;
+      grid-template-columns: repeat(5, clamp(82px, 10.5vw, 126px));
+      gap: clamp(.45rem, 1.1vw, .85rem);
+      margin-bottom: clamp(.7rem, 1.8vh, 1.2rem);
+    }
+
+    .btn-char {
+      height: clamp(82px, 10.5vw, 126px);
+      border-radius: 18px;
+      border: 2px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: clamp(2.2rem, 5.5vw, 3.6rem);
+      font-family: inherit; font-weight: 700;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 3px 12px rgba(0,0,0,.07);
+      transition: transform .12s, background .12s, color .12s, box-shadow .12s;
+    }
+    .btn-char:active {
+      transform: scale(.91);
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      box-shadow: 0 0 24px rgba(29,111,234,.4);
+    }
+
+    /* 濁音・半濁音・ん セクション */
+    .extra-section {
+      display: flex; flex-direction: column; align-items: center;
+      width: 100%;
+    }
+
+    .extra-divider {
+      width: clamp(280px, 58vw, 680px);
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+      margin-bottom: clamp(.5rem, 1.4vh, .9rem);
+    }
+
+    .extra-grid {
+      display: flex;
+      gap: clamp(.45rem, 1.1vw, .85rem);
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn-extra {
+      width:  clamp(74px, 9.5vw, 112px);
+      height: clamp(74px, 9.5vw, 112px);
+      border-radius: 16px;
+      border: 2px solid #fbbf24;
+      background: #fffbeb;
+      color: #92400e;
+      font-size: clamp(1.9rem, 4.8vw, 3.2rem);
+      font-family: inherit; font-weight: 700;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 3px 10px rgba(0,0,0,.06);
+      transition: transform .12s, background .12s, color .12s;
+    }
+    .btn-extra:active {
+      transform: scale(.91);
+      background: #f59e0b;
+      color: #fff;
+    }
+
+    .btn-n {
+      border-color: #4ade80;
+      background: #f0fdf4;
+      color: #14532d;
+    }
+    .btn-n:active { background: #22c55e; color: #fff; }
+
+    /* ━━━━━━━━━━━━━━━━━━━━━━
+       画面③　選択文字表示
+    ━━━━━━━━━━━━━━━━━━━━━━ */
+    .big-char {
+      font-size: clamp(9rem, 28vw, 20rem);
+      font-weight: 900;
+      line-height: 1;
+      color: var(--accent);
+      margin-bottom: clamp(2rem, 5vh, 4rem);
+      filter: drop-shadow(0 4px 28px rgba(29,111,234,.28));
+    }
+
+    .btn-home {
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      font-family: inherit;
+      font-size: clamp(1rem, 2.5vw, 1.4rem);
+      font-weight: 700;
+      padding: 1rem 3.5rem;
+      border-radius: 999px;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(29,111,234,.35);
+      transition: background .15s, transform .12s;
+    }
+    .btn-home:active {
+      background: var(--accent-dark);
+      transform: scale(.96);
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ① 母音選択 -->
+  <div id="screen-vowels" class="screen active">
+    <p class="title">母音を選んでください</p>
+    <div class="vowel-grid" id="vowel-grid"></div>
+  </div>
+
+  <!-- ② 文字選択 -->
+  <div id="screen-consonants" class="screen">
+    <div class="consonant-header">
+      <button class="btn-back" id="btn-back">← もどる</button>
+      <span class="row-label" id="row-label"></span>
+      <div style="width:80px"></div>
+    </div>
+    <div class="consonant-grid" id="consonant-grid"></div>
+    <div class="extra-section">
+      <div class="extra-divider"></div>
+      <div class="extra-grid" id="extra-grid"></div>
+    </div>
+  </div>
+
+  <!-- ③ 選択文字表示 -->
+  <div id="screen-selected" class="screen">
+    <div class="big-char" id="big-char"></div>
+    <button class="btn-home" id="btn-home">はじめにもどる</button>
+  </div>
+
+</div>
+<script>
+  const syllabary = {
+    'あ': { main: ['あ','か','さ','た','な','は','ま','や','ら','わ'], extra: ['が','ざ','だ','ば','ぱ'] },
+    'い': { main: ['い','き','し','ち','に','ひ','み','り'],           extra: ['ぎ','じ','ぢ','び','ぴ'] },
+    'う': { main: ['う','く','す','つ','ぬ','ふ','む','ゆ','る'],      extra: ['ぐ','ず','づ','ぶ','ぷ'] },
+    'え': { main: ['え','け','せ','て','ね','へ','め','れ'],           extra: ['げ','ぜ','で','べ','ぺ'] },
+    'お': { main: ['お','こ','そ','と','の','ほ','も','よ','ろ','を'], extra: ['ご','ぞ','ど','ぼ','ぽ'] },
+  };
+
+  // ── iOS Safari タッチ対応 ──
+  // touchstart 登録で :active CSS スタイルを有効化
+  document.addEventListener('touchstart', () => {}, { passive: true });
+
+  // touchend で即時反応・preventDefault で click の二重発火を防ぐ
+  function onTap(el, fn) {
+    el.addEventListener('touchend', e => { e.preventDefault(); fn(); }, { passive: false });
+    el.addEventListener('click', fn);
+  }
+
+  onTap(document.getElementById('btn-back'), () => showVowels());
+  onTap(document.getElementById('btn-home'), () => showVowels());
+
+  // 母音ボタン生成
+  const vowelGrid = document.getElementById('vowel-grid');
+  for (const vowel of Object.keys(syllabary)) {
+    const btn = document.createElement('button');
+    btn.className = 'btn-vowel';
+    btn.textContent = vowel;
+    onTap(btn, () => onVowelClick(vowel));
+    vowelGrid.appendChild(btn);
+  }
+
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  function showVowels() { showScreen('screen-vowels'); }
+
+  function onVowelClick(vowel) {
+    const { main, extra } = syllabary[vowel];
+    document.getElementById('row-label').textContent = vowel + ' 行';
+
+    const mainGrid = document.getElementById('consonant-grid');
+    mainGrid.innerHTML = '';
+    for (const c of main) mainGrid.appendChild(makeBtn(c, 'btn-char'));
+
+    const extraGrid = document.getElementById('extra-grid');
+    extraGrid.innerHTML = '';
+    for (const c of extra) extraGrid.appendChild(makeBtn(c, 'btn-extra'));
+    extraGrid.appendChild(makeBtn('ん', 'btn-extra btn-n'));
+
+    showScreen('screen-consonants');
+  }
+
+  function makeBtn(c, cls) {
+    const btn = document.createElement('button');
+    btn.className = cls;
+    btn.textContent = c;
+    onTap(btn, () => showChar(c));
+    return btn;
+  }
+
+  function showChar(c) {
+    document.getElementById('big-char').textContent = c;
+    showScreen('screen-selected');
+    speak(c);
+  }
+
+  function speak(text) {
+    if (!('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'ja-JP';
+    utter.rate = 0.85;
+    utter.pitch = 1.1;
+    speechSynthesis.speak(utter);
+  }
+</script>
+</body>
+</html>
